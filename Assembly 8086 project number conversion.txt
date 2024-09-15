@@ -1,0 +1,339 @@
+.model tiny
+.stack 100h
+
+.data
+; Data definitions for strings and buffers
+ins db 0dh,0ah,0dh,0ah, " -Type 'e' to exit the program  :-",'$'
+msj1 db 0dh,0ah,0dh,0ah,' Please enter a number between 0 and 999: ','$'
+bmsg db 0dh,0ah,0dh,0ah, "   1- The number in binary is: ",'$'
+hmsg db 0dh,0ah,0dh,0ah,"   2- The hexadecimal number is: ",'$'
+rmsg db 0dh,0ah,0dh,0ah,"   3- The roman number is: ",'$'
+error db 0dh,0ah,0dh,0ah," Invalid input, try again$"
+exitmsg db 0dh,0ah,0dh,0ah," Exiting the program...$"
+
+binarr db 10 dup(?)   ; Buffer for binary representation
+string db 4,?,5 dup (?)  ; Buffer for input string
+result db 100 dup('$')  ; Buffer for result
+number dw ?  ; Variable to store the number
+
+.code          
+.startup
+; Main program loop
+retry: 
+    ; Display instructions and prompt for input
+    mov ah, 9
+    mov dx, offset ins
+    int 21h
+    mov ah, 9
+    mov dx, offset msj1
+    int 21h
+
+    ; Read input from user
+    mov ah, 0ah
+    mov dx, offset string
+    int 21h  
+    
+    ; Check if user wants to exit
+    mov al, [string + 2]
+    cmp al, 'e'
+    je end 
+    
+    ; Validate input and convert to number
+    call validate_input
+    call string2number
+
+    ; Store number and convert to binary
+    mov number, bx
+    mov ax, number
+    call convert_binary
+
+    ; Display binary representation
+    mov ah,09h 
+    lea dx,bmsg
+    int 21h      
+    call print_binary            
+
+    ; Display hexadecimal representation
+    mov ah,09h 
+    lea dx,hmsg
+    int 21h   
+    call print_hex  
+    
+    ; Display Roman numeral representation
+    mov ah,09h 
+    lea dx,rmsg
+    int 21h
+    call convert_to_roman
+    
+    ; Display result
+    mov ah,09h 
+    lea dx,result
+    int 21h
+    
+    ; Repeat loop
+    jmp retry
+    
+end:      
+    ; Display exit message and terminate
+    mov ah,09h 
+    lea dx, exitmsg
+    int 21h
+    mov ah, 4ch
+    int 21h
+
+; Procedure to convert number to binary
+convert_binary proc
+    mov cx, 10         
+    lea di, binarr     
+    
+convert_loop:
+    xor dx, dx         
+    mov bx, 2
+    div bx             
+    push dx            
+    loop convert_loop
+    
+    lea di, binarr     
+    mov cx, 10         
+
+pop_loop:
+    pop dx             
+    mov [di], dl       
+    inc di             
+    loop pop_loop
+    
+    ret
+endp
+
+; Procedure to print binary representation
+print_binary proc 
+    lea si, binarr    
+    mov cx, 10        
+
+print_bin_loop:
+    mov dl, [si]      
+    add dl, 30h       
+    mov ah, 02h       
+    int 21h
+    inc si            
+    loop print_bin_loop
+    ret
+endp
+
+; Procedure to print hexadecimal representation
+print_hex proc
+    lea si, binarr    
+    mov cx, 2         
+
+    mov al, [si]        
+    shl al, 1
+    or al, [si + 1]     
+    add si, 2           
+
+    cmp al, 9
+    jbe hex_digit
+    add al, 7           
+
+hex_digit:
+    add al, 30h         
+    mov dl, al
+    mov ah, 02h
+    int 21h
+
+print_hex_loop:
+    mov al, 0          
+    mov bl, 4          
+
+shift_and_or:
+    shl al, 1          
+    or al, [si]        
+    inc si             
+    dec bl             
+    jnz shift_and_or   
+
+    cmp al, 9
+    jbe hex_digit2
+    add al, 7           
+
+hex_digit2:
+    add al, 30h         
+    mov dl, al
+    mov ah, 02h
+    int 21h
+
+    dec cx
+    cmp cx, 0
+    jnz print_hex_loop
+
+    ret
+endp
+
+; Procedure to convert string input to number
+string2number proc        
+    mov si, offset string + 1 
+    mov cl, [ si ]                                         
+    mov ch, 0 
+    add si, cx 
+    mov bx, 0
+    mov bp, 1 
+repeat:         
+    mov al, [ si ]
+    sub al, 48 
+    mov ah, 0 
+    mul bp 
+    add bx,ax  
+    mov ax, bp
+    mov bp, 10
+    mul bp 
+    mov bp, ax 
+    dec si 
+    loop repeat
+
+    ret 
+endp  
+
+; Procedure to convert number to Roman numeral
+convert_to_roman proc
+    xor di, di      
+    mov bx, number  
+
+roman_convert_loop:
+    cmp bx, 0       
+    je done
+
+    cmp bx, 1000
+    jl check_900
+    sub bx, 1000
+    mov byte ptr [result + di], 'M'
+    inc di
+    jmp roman_convert_loop
+
+check_900:
+    cmp bx, 900
+    jl check_500
+    sub bx, 900
+    mov byte ptr [result + di], 'C'
+    mov byte ptr [result + di + 1], 'M'
+    add di, 2
+    jmp roman_convert_loop
+
+check_500:
+    cmp bx, 500
+    jl check_400
+    sub bx, 500
+    mov byte ptr [result + di], 'D'
+    inc di
+    jmp roman_convert_loop
+
+check_400:
+    cmp bx, 400
+    jl check_100
+    sub bx, 400
+    mov byte ptr [result + di], 'C'
+    mov byte ptr [result + di + 1], 'D'
+    add di, 2
+    jmp roman_convert_loop
+
+check_100:
+    cmp bx, 100
+    jl check_90
+    sub bx, 100
+    mov byte ptr [result + di], 'C'
+    inc di
+    jmp roman_convert_loop
+
+check_90:
+    cmp bx, 90
+    jl check_50
+    sub bx, 90
+    mov byte ptr [result + di], 'X'
+    mov byte ptr [result + di + 1], 'C'
+    add di, 2
+    jmp roman_convert_loop
+
+check_50:
+    cmp bx, 50
+    jl check_40
+    sub bx, 50
+    mov byte ptr [result + di], 'L'
+    inc di
+    jmp roman_convert_loop
+
+check_40:
+    cmp bx, 40
+    jl check_10
+    sub bx, 40
+    mov byte ptr [result + di], 'X'
+    mov byte ptr [result + di + 1], 'L'
+    add di, 2
+    jmp roman_convert_loop
+
+check_10:
+    cmp bx, 10
+    jl check_9
+    sub bx, 10
+    mov byte ptr [result + di], 'X'
+    inc di
+    jmp roman_convert_loop
+
+check_9:
+    cmp bx, 9
+    jl check_5
+    sub bx, 9
+    mov byte ptr [result + di], 'I'
+    mov byte ptr [result + di + 1], 'X'
+    add di, 2
+    jmp roman_convert_loop
+
+check_5:
+    cmp bx, 5
+    jl check_4
+    sub bx, 5
+    mov byte ptr [result + di], 'V'
+    inc di
+    jmp roman_convert_loop
+
+check_4:
+    cmp bx, 4
+    jl check_1
+    sub bx, 4
+    mov byte ptr [result + di], 'I'
+    mov byte ptr [result + di + 1], 'V'
+    add di, 2
+    jmp roman_convert_loop
+
+check_1:
+    sub bx, 1
+    mov byte ptr [result + di], 'I'
+    inc di
+    jmp roman_convert_loop
+
+done:
+    mov byte ptr [result + di], '$'
+    ret
+endp convert_to_roman
+
+; Procedure to validate input
+validate_input proc
+    mov si, offset string + 2 
+    mov cl, [si - 1] 
+
+validate_loop:
+    mov al, [si] 
+    cmp al, '0' 
+    jb invalid_input 
+    cmp al, '9' 
+    ja invalid_input 
+    inc si 
+    dec cl 
+    jnz validate_loop 
+
+    ret
+
+invalid_input:
+    mov ah, 09h
+    lea dx, error
+    int 21h
+    jmp retry 
+
+endp
